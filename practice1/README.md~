@@ -1,6 +1,0 @@
-# Practice 1: Bootstrapping and Bare Metal Programming on RP2040
-
-This project runs on the Raspberry Pi Pico (RP2040) in Bare Metal mode.
-It displays a student account number in binary using four LEDs connected to GPIO 16–19.
-
-## Build Instructions
