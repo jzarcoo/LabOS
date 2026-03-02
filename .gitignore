@@ -1,3 +1,6 @@
 pico-sdk/
 *.zip
 *.*~
+
+**/build/*
+!**/build/.gitkeep

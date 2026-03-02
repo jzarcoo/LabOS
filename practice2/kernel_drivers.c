@@ -48,6 +48,10 @@ void k_gpio_set(uint32_t pin, uint32_t value)
 {
     // TODO: Use volatile uint32_t pointers to access SIO registers
     // Depending on value, set or clear the pin atomically (1 << pin) bitmask
+  if(value)
+    *(volatile uint32_t *) SIO_GPIO_OUT_SET = (1<<pin);
+  else
+    *(volatile uint32_t *) SIO_GPIO_OUT_CLR = (1<<pin);
 }
 
 /**
@@ -59,6 +63,7 @@ int k_gpio_get(uint32_t pin)
 {
     // TODO: Define a volatile uint32_t pointer to read the GPIO input state
     // Return the state of the specified pin by shifting and masking
-    
-    return -1; // Placeholder return
+  volatile uint32_t *gpio_in = (volatile uint32_t *) SIO_GPIO_IN;
+  return ((*gpio_in>>pin) & 1);
+  //return -1; // Placeholder return
 }
