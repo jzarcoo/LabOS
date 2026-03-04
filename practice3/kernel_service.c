@@ -25,9 +25,10 @@ void kernel_service(uint32_t *svc_args, uint32_t syscall_id) {
             break;
 
         case SYS_GPIO_GET:
-            // TODO: Read the GPIO value using the kernel function
+            // Read the GPIO value using the kernel function
+            int lectura = k_gpio_get(svc_args[0]);
             // Place the result back in r0 (svc_args[0]) to return to user space
-	        svc_args[0] = k_gpio_get(svc_args[0]);
+            svc_args[0] = lectura; 
             break;
 
         case SYS_GPIO_DIR:
@@ -37,10 +38,9 @@ void kernel_service(uint32_t *svc_args, uint32_t syscall_id) {
             if (pin < 2 || pin > 28) {
                 svc_args[0] = -1; // Error: Permission denied (EACCES)
             } else {
-                // TODO: If safe, call the driver
-                // Return success code
-	            k_gpio_init(pin, svc_args[1]);
-	            svc_args[0] = 0;
+                // If safe, call the driver
+                k_gpio_init(pin, svc_args[1]);
+                svc_args[0] = 0; // Success
             }
             break;
 

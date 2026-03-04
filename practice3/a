@@ -1,0 +1,671 @@
+cmake_minimum_required(VERSION 3.13)
+
+# Raspberry Pi Pico SDK import
+include(pico_sdk_import.cmake)
+
+# Proyect definition
+project(practica3 C CXX ASM)
+
+# SDK initialization
+pico_sdk_init()
+
+# Add the executable with ALL the pieces
+add_executable(practica3
+    main.c       # The entry point (main) and setup
+    kernel_drivers.c    # Direct memory access (SIO)
+    kernel_service.c    # Dispatcher in C (Switch/Case)
+    svc_handler.S       # The assembly wrapper for the interrupt
+    pendsv.s            # The assembly code for the context switch
+
+    user_app.c          # Student code (LED/Button logic)
+    syscalls.S          # Interface library (svc #0)
+)
+
+# Link libraries
+# We use pico_stdlib for basic functions, even though we are making an OS
+target_link_libraries(practica3
+    pico_stdlib
+    hardware_exception
+)
+
+# Generate artifacts (.uf2 to drag to the board)
+pico_add_extra_outputs(practica3)#include <stdint.h>
+
+/* SIO base address for GPIO control on the RP2040 */
+#define SIO_BASE 0xd0000000
+#define SIO_GPIO_IN (SIO_BASE + 0x004)
+#define SIO_GPIO_OUT_SET (SIO_BASE + 0x014)
+#define SIO_GPIO_OUT_CLR (SIO_BASE + 0x018)
+#define SIO_GPIO_OE_SET (SIO_BASE + 0x024)
+#define SIO_GPIO_OE_CLR (SIO_BASE + 0x028)
+
+/* IO bank 0 base address */
+#define IO_BANK0_BASE 0x40014000
+#define IO_BANK0_GPIO_CTRL(pin) (IO_BANK0_BASE + 0x004 + (pin) * 8)
+#define GPIO_FUNC_SIO 5
+
+/* PADS Control for Pull-Up/Down */
+#define PADS_BANK0_BASE 0x4001c000
+#define PADS_GPIO(x) (PADS_BANK0_BASE + 0x04 + (x)*4)
+
+/* * INTERRUPT REGISTERS (PROC0)
+ * INTE0: Pins 0-7   (Offset 0x100)
+ * INTE1: Pins 8-15  (Offset 0x104)
+ * INTE2: Pins 16-23 (Offset 0x108)
+ * INTE3: Pins 24-29 (Offset 0x10C)
+ */
+#define IO_BANK0_PROC0_INTE0_BASE (IO_BANK0_BASE + 0x100)
+
+/* * RAW INTERRUPT STATUS (INTR)
+ * INTR0: Pins 0-7   (Offset 0x0F0)
+ * INTR1: Pins 8-15  (Offset 0x0F4)
+ * ...
+ */
+#define IO_BANK0_INTR0_BASE (IO_BANK0_BASE + 0x0F0)
+
+/**
+ * @brief Initialize a GPIO pin for SIO and set its direction.
+ * @param pin GPIO number.
+ * @param output 1 for output, 0 for input.
+ */
+void k_gpio_init(uint32_t pin, uint32_t output)
+{
+    volatile uint32_t *gpio_ctrl = (volatile uint32_t *)IO_BANK0_GPIO_CTRL(pin);
+    *gpio_ctrl = (*gpio_ctrl & ~0x1F) | GPIO_FUNC_SIO;
+
+    if (output)
+        *(volatile uint32_t *)SIO_GPIO_OE_SET = (1 << pin);
+    else
+        *(volatile uint32_t *)SIO_GPIO_OE_CLR = (1 << pin);
+}
+
+/**
+ * @brief Set a GPIO output level.
+ * @param pin GPIO number.
+ * @param value 1 to set high, 0 to set low.
+ */
+void k_gpio_set(uint32_t pin, uint32_t value)
+{
+    if (value)
+        *(volatile uint32_t *)SIO_GPIO_OUT_SET = (1 << pin);
+    else
+        *(volatile uint32_t *)SIO_GPIO_OUT_CLR = (1 << pin);
+}
+
+/**
+ * @brief Read a GPIO input level.
+ * @param pin GPIO number.
+ * @return 1 if high, 0 if low.
+ */
+int k_gpio_get(uint32_t pin)
+{
+    uint32_t state = *(volatile uint32_t *)SIO_GPIO_IN;
+    return (state >> pin) & 1;
+}
+
+/**
+ * @brief Enable internal pull-up to avoid floating pins.
+ */
+void k_gpio_pullup(uint32_t pin) {
+    volatile uint32_t *pad_ctrl = (volatile uint32_t *)PADS_GPIO(pin);
+    // Bit 3 = PUE (Pull Up Enable), Bit 2 = PDE (Pull Down Enable)
+    *pad_ctrl |= (1 << 3); 
+    *pad_ctrl &= ~(1 << 2);
+}
+
+/**
+ * @brief Enable edge interrupt mapped by 8-pin banks.
+ * @param pin GPIO number.
+ * @param rising_edge 1 for rising edge, 0 for falling edge.
+ */
+void k_gpio_irq_enable(uint32_t pin, uint32_t rising_edge) {
+    // Compute which INTE register this pin maps to (0, 1, 2, or 3)
+    // Pin 15 -> Bank 1
+    uint32_t bank_idx = pin / 8;
+    
+    // Compute the shift within that register (0 to 7)
+    // Pin 15 -> Shift 7 (within the bank)
+    uint32_t pin_in_bank = pin % 8;
+    
+    // Each pin uses 4 bits, so multiply by 4
+    // Pin 15 -> Bits 28-31 of INTE1
+    uint32_t shift = pin_in_bank * 4;
+
+    // Get address of the correct register
+    volatile uint32_t *inte_reg = (volatile uint32_t *)(IO_BANK0_PROC0_INTE0_BASE + (bank_idx * 4));
+
+    // Write configuration (+2 Edge Low, +3 Edge High)
+    if (rising_edge) {
+        *inte_reg |= (1 << (shift + 3)); 
+    } else {
+        *inte_reg |= (1 << (shift + 2)); 
+    }
+}
+
+/**
+ * @brief Clear the interrupt using the correct INTR register.
+ * @param pin GPIO number.
+ */
+void k_gpio_irq_clear(uint32_t pin) {
+    uint32_t bank_idx = pin / 8;
+    uint32_t pin_in_bank = pin % 8;
+    uint32_t shift = pin_in_bank * 4;
+
+    // INTR0 base + bank offset
+    volatile uint32_t *intr_reg = (volatile uint32_t *)(IO_BANK0_INTR0_BASE + (bank_idx * 4));
+    
+    // Clear both edges by writing 1s (W1C)
+    *intr_reg = (1 << (shift + 2)) | (1 << (shift + 3));
+}#include <stdint.h>
+
+/* Syscall ID for GPIO set operation*/
+#define SYS_GPIO_SET 1
+/* Syscall ID for GPIO get operation*/
+#define SYS_GPIO_GET 2
+/* Syscall ID for GPIO direction configuration */
+#define SYS_GPIO_DIR 3
+
+// Declarations of kernel-level GPIO functions (defined in kernel_driver.c)
+extern void k_gpio_set(uint32_t pin, uint32_t value);
+extern int k_gpio_get(uint32_t pin);
+extern void k_gpio_init(uint32_t pin, uint32_t output);
+
+/*
+ * @brief Kernel service handler for system calls.
+ * @param svc_args: Pointer to the user stack frame.
+ * @param syscall_id: The value of r7 passed by the assembler
+ */
+void kernel_service(uint32_t *svc_args, uint32_t syscall_id) {
+    switch (syscall_id) {
+        case SYS_GPIO_SET:
+            // Set the GPIO value using the kernel function
+            k_gpio_set(svc_args[0], svc_args[1]);
+            break;
+
+        case SYS_GPIO_GET:
+            // Read the GPIO value using the kernel function
+            int lectura = k_gpio_get(svc_args[0]);
+            // Place the result back in r0 (svc_args[0]) to return to user space
+            svc_args[0] = lectura; 
+            break;
+
+        case SYS_GPIO_DIR:
+            // Validate before executing.
+            // Example: Prohibit touching pins 0 and 1 (UART) or pins > 28 (System)
+            int pin = svc_args[0];
+            if (pin < 2 || pin > 28) {
+                svc_args[0] = -1; // Error: Permission denied (EACCES)
+            } else {
+                // If safe, call the driver
+                k_gpio_init(pin, svc_args[1]);
+                svc_args[0] = 0; // Success
+            }
+            break;
+
+        default:
+            // Invalid syscall ID, return an error code (e.g., -1)
+            svc_args[0] = -1; 
+            break;
+    }
+}#include <stdint.h>
+#include "hardware/exception.h"
+#include "syscalls.h"
+
+/* --- Hardware Configuration --- */
+#define BTN_PIN 15
+#define LED_DEBUG 25
+
+/* Direct Debug Registers */
+#define SIO_GPIO_OUT_XOR (SIO_BASE + 0x01C) 
+
+/* Core Registers */
+#define NVIC_ISER       (*(volatile uint32_t *)0xE000E100)
+#define SCB_ICSR        (*(volatile uint32_t *)0xE000ED04)
+#define SCB_VTOR        (*(volatile uint32_t *)0xE000ED08) 
+#define SHPR3           (*(volatile uint32_t *)0xE000ED20) // System Handler Priority Register 3
+#define ICSR_PENDSVSET  (1 << 28)
+
+/* --- OS Configuration --- */
+#define STACK_SIZE 256
+
+/* 8-byte aligned stacks (ARM AAPCS requirement) */
+uint32_t task1_stack[STACK_SIZE] __attribute__((aligned(8)));
+uint32_t task2_stack[STACK_SIZE] __attribute__((aligned(8)));
+
+uint32_t *sp_task1;
+uint32_t *sp_task2;
+volatile uint32_t current_task_id = 0;
+
+/* External Declarations */
+extern void wrapper_svc(void);
+extern void task_counter(void);
+extern void task_animation(void);
+extern void k_gpio_init(uint32_t pin, uint32_t output); 
+extern void k_gpio_irq_enable(uint32_t pin, uint32_t rising_edge);
+extern void k_gpio_irq_clear(uint32_t pin);
+extern void k_gpio_pullup(uint32_t pin);
+extern uint32_t ram_vector_table[];
+// IMPORTANT: Declare the assembly handler so it can be installed
+extern void PendSV_Handler(void); 
+
+/* --- Interrupt Handler (Button) --- */
+/**
+ * @brief GPIO interrupt handler for the button.
+ */
+void IO_IRQ_BANK0_Handler(void) {
+    // Debug: Toggle LED to confirm we enter here
+    *(volatile uint32_t *)SIO_GPIO_OUT_XOR = (1 << LED_DEBUG);
+
+    k_gpio_irq_clear(BTN_PIN);      
+    SCB_ICSR |= ICSR_PENDSVSET;     // Request context switch
+}
+
+/* --- Vector Table Installation --- */
+/**
+ * @brief Install the interrupt vector table in RAM.
+ */
+void install_vector_table(void) {
+    // Install button handler (IRQ 13)
+    ram_vector_table[16 + 13] = (uint32_t)IO_IRQ_BANK0_Handler;
+    
+    // Install PendSV handler (Exception 14)
+    // This is CRITICAL: if missing, PendSV jumps to an infinite Default_Handler.
+    ram_vector_table[14] = (uint32_t)PendSV_Handler; 
+
+    // Point the core to the RAM table
+    SCB_VTOR = (uint32_t)ram_vector_table; 
+}
+
+/* --- Stack Initialization --- */
+/**
+ * @brief Initialize a task stack with a synthetic exception frame.
+ * @param stack_buffer Base of the task stack buffer.
+ * @param task_func Entry point for the task.
+ * @param sp_ptr Output pointer for the initial stack pointer value.
+ */
+void task_init_stack(uint32_t *stack_buffer, void (*task_func)(void), uint32_t **sp_ptr) {
+    uint32_t *stk = stack_buffer + STACK_SIZE;
+
+    // Hardware frame
+    *(--stk) = 0x01000000;          // xPSR (Thumb bit)
+    *(--stk) = (uint32_t)task_func; // PC
+    *(--stk) = 0xFFFFFFFD;          // LR (Return to Thread/PSP)
+    *(--stk) = 0;                   // R12
+    *(--stk) = 0;                   // R3
+    *(--stk) = 0;                   // R2
+    *(--stk) = 0;                   // R1
+    *(--stk) = 0;                   // R0
+
+    // Software frame (R4-R11)
+    for (int i = 0; i < 8; i++) {
+        *(--stk) = 0;
+    }
+
+    *sp_ptr = stk;
+}
+
+/**
+ * @brief Start the first task by restoring its context.
+ */
+void os_start_first_task(void) {
+    __asm volatile (
+        "ldr r0, =sp_task1    \n" 
+        "ldr r0, [r0]         \n" 
+        
+        // Manually load software frame (R4-R11)
+        "ldmia r0!, {r4-r7}   \n" 
+        "mov r8, r4           \n" 
+        "mov r9, r5           \n"
+        "mov r10, r6          \n"
+        "mov r11, r7          \n"
+        "ldmia r0!, {r4-r7}   \n" 
+        
+        // R0 now points to the start of the hardware frame
+        "msr psp, r0          \n" 
+        
+        "movs r0, #2          \n" // Switch to PSP
+        "msr control, r0      \n"
+        "isb                  \n"
+        
+        // Simulate exception return (unstack HW frame from PSP)
+        "pop {r0-r5}          \n" // Pop R0-LR
+        "pop {r6-r7}          \n" // Pop PC, xPSR
+        
+        "cpsie i              \n" // Enable interrupts
+        "bx r6                \n" // Jump to task
+    );
+}
+
+/**
+ * @brief Kernel entry point.
+ * @return Never returns.
+ */
+int main(void) {
+    install_vector_table();
+    exception_set_exclusive_handler((enum exception_number)11, wrapper_svc);
+    
+    // Set PendSV priority to lowest (0xFF)
+    // Bits 23:16 control PRI_14 (PendSV)
+    SHPR3 |= (0xFF << 16);
+
+    // Hardware init
+    k_gpio_init(LED_DEBUG, 1); 
+    
+    k_gpio_init(BTN_PIN, 0);   
+    k_gpio_pullup(BTN_PIN);
+    k_gpio_irq_enable(BTN_PIN, 0); 
+    
+    NVIC_ISER = (1 << 13);
+
+    // Initialize tasks
+    task_init_stack(task1_stack, task_counter, &sp_task1);
+    task_init_stack(task2_stack, task_animation, &sp_task2);
+
+    os_start_first_task();
+
+    while (1);
+}.syntax unified
+.cpu cortex-m0plus
+.thumb
+
+.global PendSV_Handler
+.type PendSV_Handler, %function
+
+PendSV_Handler:
+    /* Context Switching Routine for PendSV Exception */
+    
+    /* Disable interrupts to ensure atomicity during context switch */
+    cpsid i
+
+    /* Mov PSP (Process Stack Pointer) to R0 for manipulation */
+    mrs r0, psp
+
+    /* Hardware automatically saves R0-R3, R12, LR, PC, and xPSR on the stack when an exception occurs.  We need to save the remaining registers (R4-R11) manually. */
+
+    /* For 8 registers (R4-R11), we need 32 bytes (8 registers * 4 bytes each) */
+    subs r0, #32
+    
+    /* Store R4-R7 in the lower part of the stack frame */
+    stmia r0!, {r4-r7}
+    
+    /* Move R8-R11 to R4-R7 temporarily to store them */
+    mov r4, r8
+    mov r5, r9
+    mov r6, r10
+    mov r7, r11
+    
+    /* Store R8-R11 in the upper part of the stack frame (offset +16) */
+    stmia r0!, {r4-r7}
+    
+    /* Restore R0 to point to the start of the full stack frame (including hardware-saved registers) */
+    subs r0, #32
+
+    /* Read current_task_id to determine where to save the current context */
+    ldr r2, =current_task_id
+    /* r3 now holds the current task ID */
+    ldr r3, [r2]  
+    
+    /* If current_task_id is 0, we just switched from task 0 to task 1, so we save the context of task 0 in sp_task1. If it's 1, we save in sp_task2. */
+    cmp r3, #0
+    beq save_task1
+
+save_task2:
+    ldr r1, =sp_task2
+    str r0, [r1]            /* Update sp_task2 with the current stack pointer of task 2 */
+    movs r3, #0             /* Prepare the ID for the next task (0) */
+    b switch_context        /* Jump to the context switch part */
+
+save_task1:
+    ldr r1, =sp_task1
+    str r0, [r1]            /* Update sp_task1 with the current stack pointer of task 1 */
+    movs r3, #1             /* Prepare the ID for the next task (1) */
+
+switch_context:
+    str r3, [r2]            /* Store the new current_task_id (the task we are switching to) */
+
+    /* If current_task_id was 0, we need to load task 1's context. If it was 1, we load task 2's context. */
+    cmp r3, #0
+    beq load_task1
+
+load_task2:
+    ldr r1, =sp_task2
+    ldr r0, [r1]            /* store in r0 the sp_task2 value, which is the stack pointer of task 2 */
+    b restore_context
+
+load_task1:
+    ldr r1, =sp_task1
+    ldr r0, [r1]            /* store in r0 the sp_task1 value, which is the stack pointer of task 1 */
+
+restore_context:
+    /* R0 points to the stack frame of the task we are switching to. We need to restore R4-R11 from this stack frame. */
+    /* Recover R8-R11 registers first (they are in the upper part of the stack frame) */
+    adds r0, #16
+    ldmia r0!, {r4-r7}
+    mov r8, r4
+    mov r9, r5
+    mov r10, r6
+    mov r11, r7
+    
+    /* Recover R4-R7 registers (they are in the lower part of the stack frame) */
+    subs r0, #32            /* Get back to the start of the stack frame */
+    ldmia r0!, {r4-r7}      /* Restore R4-R7 from the stack frame */
+    
+    /* At this point, R0-R3, R12, LR, PC, and xPSR are still on the stack and will be automatically restored when we exit the exception handler. We just need to update the PSP to point to the new stack frame for the task we are switching to. */
+    adds r0, #16
+
+    /* Update PSP to point to the new stack frame */
+    msr psp, r0
+
+    /* Enable interrupts again before exiting the exception handler */
+    cpsie i
+
+    /* Special return from exception to switch to the new task. The value 0xFFFFFFFD tells the processor to return to Thread mode and use the Process Stack Pointer (PSP) for the new task. */
+    ldr r0, =0xFFFFFFFD
+    bx r0
+
+.align 4
+.syntax unified
+.cpu cortex-m0plus
+.thumb
+
+@ Smart wrapper for system calls
+.global wrapper_svc
+.type wrapper_svc, %function
+
+wrapper_svc:
+    @ The processor stores a special code in LR (EXC_RETURN)
+    @ If bit 2 of LR is 1, we return to PSP. If 0, to MSP.
+    @ We use this to know where the arguments are.
+
+    mov r0, lr          @ Move LR to R0 for testing
+    movs r1, #4         @ Mask for bit 2 (value 4)
+    tst r0, r1          @ Test bit 2 of LR
+    beq use_msp         @ If 0 (Z-flag set), use MSP
+
+use_psp:
+    mrs r0, psp         @ Load PSP address into R0 (Arg0 for C)
+    b call_kernel       @ Jump to the call
+
+use_msp:
+    mrs r0, msp         @ Load MSP address into R0 (Arg0 for C)
+
+call_kernel:
+    mov r1, r7          @ Arg1 for C: Syscall ID (in r7)
+    
+    push {r4, lr}       @ Save r4 and lr (stack alignment)
+    bl kernel_service   @ Jump to C kernel function
+    pop {r4, pc}        @ Return#ifndef SYSCALLS_H
+#define SYSCALLS_H
+
+/**
+ * @file syscalls.h
+ * @brief Syscall interfaces for GPIO operations.
+ */
+
+/**
+ * @brief Syscalls interface for gpio write operation.
+ * @param pin GPIO pin number
+ * @param value 1 for high, 0 for low
+ */
+void sys_gpio_set(int pin, int value);
+
+/**
+ * @brief Syscalls interface for gpio read operation.
+ * @param pin GPIO pin number
+ * @return 1 if high, 0 if low
+ */
+int sys_gpio_get(int pin);
+
+/**
+ * @brief Syscalls interface for gpio direction configuration.
+ * @param pin GPIO pin number
+ * @param output 1 for output, 0 for input
+ * @return 0 on success, -1 on error (e.g., invalid pin)
+ */
+int sys_gpio_dir(int pin, int output);
+
+#endif.syntax unified
+.cpu cortex-m0plus
+.thumb
+
+@ IDs definitions as seen in kernel_driver.c
+.equ SYS_GPIO_SET, 1
+.equ SYS_GPIO_GET, 2
+.equ SYS_GPIO_DIR, 3
+
+@ --- Function: void sys_gpio_dir(int pin, int out) ---
+.global sys_gpio_dir
+.type sys_gpio_dir, %function
+sys_gpio_dir:
+    @ r0: pin
+    @ r1: out (1 = output, 0 = input)
+    @ Save r7 in r12 (caller-saved) to avoid touching the user stack
+    mov r12, r7
+    movs r7, #SYS_GPIO_DIR
+    svc #0
+    mov r7, r12
+    bx lr
+
+@ --- Function: void sys_gpio_set(int pin, int value) ---
+.global sys_gpio_set
+.type sys_gpio_set, %function
+sys_gpio_set:
+    @ r0: pin (Argument 1) - Already in place
+    @ r1: value (Argument 2) - Already in place
+    @ Save r7 in r12 to avoid modifying user stack
+    mov r12, r7
+    movs r7, #SYS_GPIO_SET @ Load syscall ID (1)
+    svc #0              @ System Call! (Jump to Kernel)
+    mov r7, r12         @ Restore r7
+    bx lr               @ Return
+
+@ --- Function: int sys_gpio_get(int pin) ---
+.global sys_gpio_get
+.type sys_gpio_get, %function
+sys_gpio_get:
+    @ r0: pin (Argument 1)
+    @ Save r7 in r12 to avoid modifying user stack
+    mov r12, r7
+    movs r7, #SYS_GPIO_GET @ Load syscall ID (2)
+    svc #0              @ Kernel will place the result in r0
+    mov r7, r12
+    bx lr#include <stdint.h>
+#include "syscalls.h"
+
+/* Pin Definitions */
+#define LED_0 16
+#define LED_1 17
+#define LED_2 18
+#define LED_3 19
+#define LED_4 20
+
+/**
+ * @brief Busy-wait for an exact number of core cycles.
+ * @param cycles Number of cycles to delay.
+ */
+static inline void delay_cycles_exact(uint32_t cycles) {
+    __asm volatile (
+        "1: \n"
+        "sub %[c], %[c], #1 \n"  // 1 cycle
+        "bne 1b \n"               // 1-3 cycles (depends on branch)
+        : [c] "+r" (cycles)
+        :
+        : "cc"
+    );
+}
+
+
+/**
+ * @brief Configure LED GPIOs as outputs.
+ */
+void setup_leds(void) {
+    sys_gpio_dir(LED_0, 1);
+    sys_gpio_dir(LED_1, 1);
+    sys_gpio_dir(LED_2, 1);
+    sys_gpio_dir(LED_3, 1);
+    sys_gpio_dir(LED_4, 1);
+}
+
+/**
+ * @brief Binary counter task that updates LEDs.
+ */
+void task_counter(void) {
+    setup_leds();
+    
+    // This variable retains its value across context switches
+    // because it lives on this task's stack.
+    uint8_t count = 0; 
+
+    while (1) {
+        sys_gpio_set(LED_0, (count >> 0) & 1);
+        sys_gpio_set(LED_1, (count >> 1) & 1);
+        sys_gpio_set(LED_2, (count >> 2) & 1);
+        sys_gpio_set(LED_3, (count >> 3) & 1);
+        sys_gpio_set(LED_4, (count >> 4) & 1);
+
+        count++;
+        if (count > 31) count = 0;
+
+        delay_cycles_exact(41700000/2);
+    }
+}
+
+/**
+ * @brief Ping-pong LED animation task.
+ */
+void task_animation(void) {
+    setup_leds();
+
+    // Persistent state variables on the stack
+    int pins[] = {LED_0, LED_1, LED_2, LED_3, LED_4};
+    int active_led = 0;
+    int direction = 1;
+
+    while (1) {
+        // Turn off all
+        for (int i = 0; i < 5; i++) {
+            sys_gpio_set(pins[i], 0);
+        }
+
+        // Turn on current
+        sys_gpio_set(pins[active_led], 1);
+
+        // Compute next position
+        active_led += direction;
+
+        if (active_led >= 4) {
+            direction = -1;
+        } else if (active_led <= 0) {
+            direction = 1;
+        }
+
+        delay_cycles_exact(41700000);
+    }
+}
+
+/**
+ * @brief User application entry point (unused).
+ */
+void user_app_entry(void) {
+    // Unused, tasks start directly
+}
