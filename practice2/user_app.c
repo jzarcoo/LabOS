@@ -25,11 +25,11 @@ int user_app_entry(void) {
     int prev_btn_state = 0;
     while (1) {
         int btn_state = sys_gpio_get(BTN_PIN);
-        sys_gpio_set(LED_PIN,btn_state);
+        sys_gpio_set(LED_PIN, btn_state);
         // Falling edge detection for the button press
         if (btn_state == 1 && prev_btn_state == 0) {
             // Debounce
-            pausa(2);
+            delay(2);
             led_state = !led_state; 
             sys_gpio_set(LED_PIN, led_state);
         }
