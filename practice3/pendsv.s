@@ -43,10 +43,19 @@ PendSV_Handler:
     cmp r3, #0
     beq save_task1
 
+    cmp r3, #1
+    beq save_task2
+
+save_task3:
+    ldr r1, =sp_task3
+    str r0, [r1]            /* Update sp_task3 with the current stack pointer of task 3 */
+    movs r3, #0             /* Prepare the ID for the next task (2) */
+    b switch_context        /* Jump to the context switch part */
+
 save_task2:
     ldr r1, =sp_task2
     str r0, [r1]            /* Update sp_task2 with the current stack pointer of task 2 */
-    movs r3, #0             /* Prepare the ID for the next task (0) */
+    movs r3, #2             /* Prepare the ID for the next task (0) */
     b switch_context        /* Jump to the context switch part */
 
 save_task1:
@@ -60,6 +69,14 @@ switch_context:
     /* If current_task_id was 0, we need to load task 1's context. If it was 1, we load task 2's context. */
     cmp r3, #0
     beq load_task1
+
+    cmp r3, #1
+    beq load_task2
+
+load_task3:
+    ldr r1, =sp_task3
+    ldr r0, [r1]            /* store in r0 the sp_task3 value, which is the stack pointer of task 3 */
+    b restore_context
 
 load_task2:
     ldr r1, =sp_task2

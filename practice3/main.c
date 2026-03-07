@@ -22,15 +22,18 @@
 /* 8-byte aligned stacks (ARM AAPCS requirement) */
 uint32_t task1_stack[STACK_SIZE] __attribute__((aligned(8)));
 uint32_t task2_stack[STACK_SIZE] __attribute__((aligned(8)));
+uint32_t task3_stack[STACK_SIZE] __attribute__((aligned(8)));
 
 uint32_t *sp_task1;
 uint32_t *sp_task2;
+uint32_t *sp_task3;
 volatile uint32_t current_task_id = 0;
 
 /* External Declarations */
 extern void wrapper_svc(void);
 extern void task_counter(void);
 extern void task_animation(void);
+extern void task_blink(void);
 extern void k_gpio_init(uint32_t pin, uint32_t output); 
 extern void k_gpio_irq_enable(uint32_t pin, uint32_t rising_edge);
 extern void k_gpio_irq_clear(uint32_t pin);
@@ -151,6 +154,7 @@ int main(void) {
     // Initialize tasks
     task_init_stack(task1_stack, task_counter, &sp_task1);
     task_init_stack(task2_stack, task_animation, &sp_task2);
+    task_init_stack(task3_stack, task_blink, &sp_task3);
 
     os_start_first_task();
 

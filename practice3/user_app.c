@@ -93,6 +93,24 @@ void task_animation(void) {
 }
 
 /**
+ * @brief Blinking LED task.
+ */
+void task_blink(void) {
+    setup_leds();
+    
+    int pins[] = {LED_0, LED_1, LED_2, LED_3, LED_4};
+    int state = 0;
+
+    while (1) {
+        for (int i = 0; i < 5; i++) {
+            sys_gpio_set(pins[i], state);
+        }
+        state = !state;
+        delay_cycles_exact(41700000);
+    }
+}
+
+/**
  * @brief User application entry point (unused).
  */
 void user_app_entry(void) {
