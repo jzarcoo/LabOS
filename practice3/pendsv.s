@@ -38,8 +38,8 @@ PendSV_Handler:
     ldr r2, =current_task_id
     /* r3 now holds the current task ID */
     ldr r3, [r2]  
-    
-    /* If current_task_id is 0, we just switched from task 0 to task 1, so we save the context of task 0 in sp_task1. If it's 1, we save in sp_task2. */
+
+    /* If current_task_id is 0, we need to save the context of task 1, so we save in sp_task1. If it's 1, we save the context of task 2 in sp_task2. If it's 2, we save the context of task 3 in sp_task3 */
     cmp r3, #0
     beq save_task1
 
