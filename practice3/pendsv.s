@@ -49,19 +49,19 @@ PendSV_Handler:
 save_task3:
     ldr r1, =sp_task3
     str r0, [r1]            /* Update sp_task3 with the current stack pointer of task 3 */
-    movs r3, #0             /* Prepare the ID for the next task (2) */
+    movs r3, #0             /* Prepare the ID for the next task (1) */
     b switch_context        /* Jump to the context switch part */
 
 save_task2:
     ldr r1, =sp_task2
     str r0, [r1]            /* Update sp_task2 with the current stack pointer of task 2 */
-    movs r3, #2             /* Prepare the ID for the next task (0) */
+    movs r3, #2             /* Prepare the ID for the next task (3) */
     b switch_context        /* Jump to the context switch part */
 
 save_task1:
     ldr r1, =sp_task1
     str r0, [r1]            /* Update sp_task1 with the current stack pointer of task 1 */
-    movs r3, #1             /* Prepare the ID for the next task (1) */
+    movs r3, #1             /* Prepare the ID for the next task (2) */
 
 switch_context:
     str r3, [r2]            /* Store the new current_task_id (the task we are switching to) */
