@@ -16,8 +16,8 @@ extern void isr_pendsv(void);
 // Prototipos de las tareas de usuario (definidas en user_app.c)
 extern void task_counter(void);
 extern void task_animation(void);
-// extern void task3_infinite(void);
-// extern void task4_finite(void);
+extern void task3_infinite(void);
+extern void task4_finite(void);
 
 int main() {
     // 1. Inicializar I/O Estándar (Habilita printf y lectura por cable USB)
