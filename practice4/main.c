@@ -23,6 +23,13 @@ int main() {
     // 1. Inicializar I/O Estándar (Habilita printf y lectura por cable USB)
     stdio_init_all();
 
+    // Asegura que el dispositivo esté conectado por USB antes de continuar (para no perder mensajes)
+    while (!stdio_usb_connected()) {
+        printf("Esperando conexión USB...\n");
+        sleep_ms(100);
+    }
+    printf("Conexión USB establecida.\n");
+
     // 2. Registrar los manejadores de Excepciones del Sistema Operativo
     // SVC (ID 11) maneja las Syscalls solicitadas por las tareas
     exception_set_exclusive_handler((enum exception_number)11, wrapper_svc);
