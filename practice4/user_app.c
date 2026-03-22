@@ -105,6 +105,13 @@ void task_animation(void)
 void task3_infinite(void)
 {
     // TODO: Implement an infinite task that rapidly blinks a different LED (e.g., LED_1).
+    setup_leds();
+    int state = 0;
+    while (1) {
+        sys_gpio_set(LED_1, state);
+        state = !state; 
+        delay_cycles_exact(41700000 / 10); 
+    }
 }
 
 /**
@@ -113,6 +120,13 @@ void task3_infinite(void)
 void task4_finite(void)
 {
     // TODO: Implement a finite task that blinks an LED 5 times and then terminates.
+    setup_leds();
+    for (int i = 0; i < 5; i++) {
+        sys_gpio_set(LED_2, 1);
+        delay_cycles_exact(41700000 / 10);
+        sys_gpio_set(LED_2, 0);
+        delay_cycles_exact(41700000 / 10);
+    }
 }
 
 /**
