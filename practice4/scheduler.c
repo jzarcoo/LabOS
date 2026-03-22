@@ -40,6 +40,8 @@ void task_create(int id, void (*entry_point)(void)) {
     if (id >= 0 && id < MAX_TASKS) {
         tasks[id].entry_point = entry_point;
         tasks[id].state = DORMANT;
+        tasks[id].quantum = 1; 
+        tasks[id].ticks_remaining = tasks[id].quantum; 
     }
 }
 
@@ -57,6 +59,15 @@ void isr_systick() {
         } else {
             printf("Tarea %d ya esta en ejecucion.\n", idx + 1);
         }
+    }
+
+    if (current_task != -1) {
+        // Si todavia tiene tiempo de CPU, continua la ejecución
+        if (--tasks[current_task].ticks_remaining > 0) {
+            return; 
+        }
+        // Restablece datos de la tarea
+        tasks[current_task].ticks_remaining = tasks[current_task].quantum; 
     }
 
     // 2. Trigger PendSV to perform the context switch
@@ -105,6 +116,7 @@ uint32_t schedule(uint32_t current_sp) {
     if (tasks[next_task].state == READY) {
         current_task = next_task;
         tasks[current_task].state = RUNNING;
+        tasks[current_task].ticks_remaining = tasks[current_task].quantum; 
         return (uint32_t)tasks[current_task].sp;
     }
 
