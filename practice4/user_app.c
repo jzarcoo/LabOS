@@ -123,10 +123,12 @@ void task4_finite(void)
     setup_leds();
     for (int i = 0; i < 5; i++) {
         sys_gpio_set(LED_2, 1);
-        delay_cycles_exact(41700000 / 10);
+        delay_cycles_exact(41700000 / 4);
         sys_gpio_set(LED_2, 0);
-        delay_cycles_exact(41700000 / 10);
+        delay_cycles_exact(41700000 / 4);
     }
+    // Terminate the task after blinking 5 times
+    sys_exit(); 
 }
 
 /**
