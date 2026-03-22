@@ -11,12 +11,16 @@ sudo usermod -aG dialout $USER
 newgrp dialout
 ```
 
-3. Connect to the Raspberry Pi Pico
+3. Identify the correct serial device.
+```sh
+ls -l /dev/ttyACM*
+```
+
+4. Connect to the Raspberry Pi Pico (replace `/dev/ttyACM0` if needed)
 ```sh
 sudo screen /dev/ttyACM0 115200
 ```
 
+5. Interact with the system: press keys 1, 2, 3, or 4 to enqueue tasks
 
-4. Interact with the system:  Press keys 1, 2, 3, or 4 to enqueue tasks
-
-5. To exit the terminal press `Ctrl + A`, then `K`.
+6. To exit the terminal press `Ctrl + A`, then `K`.
