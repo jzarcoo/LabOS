@@ -18,6 +18,8 @@ typedef struct {
     uint32_t *sp;                  // Puntero de Pila actual
     task_state_t state;            // Estado de la tarea
     uint32_t stack[STACK_SIZE];    // Espacio de memoria de la pila
+    int quantum;                   // Peso de la tarea para scheduling ponderado
+    int ticks_remaining;           // Ticks restantes para la tarea actual
     void (*entry_point)(void);     // Función de la tarea
 } tcb_t;
 
