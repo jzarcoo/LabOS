@@ -36,8 +36,8 @@ int main() {
     // 4. Registrar tareas en el Scheduler (inician en estado DORMANT, esperando al usuario)
     task_create(0, task_counter);
     task_create(1, task_animation);
-    // task_create(2, task3_infinite);
-    // task_create(3, task4_finite);
+    task_create(2, task3_infinite);
+    task_create(3, task4_finite);
 
     // 5. Configurar e iniciar SysTick
     // Para un reloj de 125MHz, contar 1,250,000 ciclos equivale a 10 milisegundos
