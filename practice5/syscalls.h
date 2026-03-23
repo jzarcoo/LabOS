@@ -1,6 +1,8 @@
 #ifndef SYSCALLS_H
 #define SYSCALLS_H
 
+#include "semaphore.h"
+
 /**
  * @file syscalls.h
  * @brief Syscall interfaces for GPIO operations.
@@ -27,6 +29,9 @@ int sys_gpio_get(int pin);
  * @return 0 on success, -1 on error (e.g., invalid pin)
  */
 int sys_gpio_dir(int pin, int output);
+
+void sys_sem_wait(semaphore_t *sem);
+void sys_sem_post(semaphore_t *sem);
 
 
 /**

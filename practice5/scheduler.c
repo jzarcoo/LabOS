@@ -40,6 +40,8 @@ void task_create(int id, void (*entry_point)(void)) {
     if (id >= 0 && id < MAX_TASKS) {
         tasks[id].entry_point = entry_point;
         tasks[id].state = DORMANT;
+        tasks[id].quantum = 10; 
+        tasks[id].remaining_ticks = 10;
     }
 }
 
@@ -49,7 +51,7 @@ void task_create(int id, void (*entry_point)(void)) {
 void isr_systick() {
     // 1. Non-blocking USB UART polling
     int c = getchar_timeout_us(0); 
-    if (c >= '1' && c <= '4') {
+    if (c >= '1' && c <= '5') {
         int idx = c - '1';
         if (tasks[idx].state == DORMANT) {
             init_task_stack(idx); // Prepare its stack
@@ -57,6 +59,13 @@ void isr_systick() {
         } else {
             printf("Tarea %d ya esta en ejecucion.\n", idx + 1);
         }
+    }
+
+    if (current_task != -1) {
+        if (--tasks[current_task].remaining_ticks > 0) {
+            return; 
+        }
+        tasks[current_task].remaining_ticks = tasks[current_task].quantum;
     }
 
     // 2. Trigger PendSV to perform the context switch
@@ -105,6 +114,7 @@ uint32_t schedule(uint32_t current_sp) {
     if (tasks[next_task].state == READY) {
         current_task = next_task;
         tasks[current_task].state = RUNNING;
+        tasks[current_task].remaining_ticks = tasks[current_task].quantum;
         return (uint32_t)tasks[current_task].sp;
     }
 

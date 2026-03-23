@@ -1,5 +1,7 @@
+#include <stdio.h>
 #include <stdint.h>
 #include "syscalls.h"
+#include "semaphore.h"
 
 /* Pin Definitions */
 #define LED_0 16
@@ -7,6 +9,10 @@
 #define LED_2 18
 #define LED_3 19
 #define LED_4 20
+
+static int sem_initialized = 0;
+semaphore_t sem_radio;
+semaphore_t sem_energy;
 
 /**
  * @brief Busy-wait for an exact number of core cycles.
@@ -33,6 +39,13 @@ void setup_leds(void)
     sys_gpio_dir(LED_2, 1);
     sys_gpio_dir(LED_3, 1);
     sys_gpio_dir(LED_4, 1);
+}
+
+void setup_semaphores(void) {
+    if (sem_initialized==1) return;
+    k_sem_init(&sem_radio, 1); 
+    k_sem_init(&sem_energy, 3); 
+    sem_initialized = 1;
 }
 
 /**
@@ -113,6 +126,44 @@ void task3_infinite(void)
 void task4_finite(void)
 {
     // TODO: Implement a finite task that blinks an LED 5 times and then terminates.
+}
+
+void subsystem_task(int led, int id){
+    sys_gpio_dir(led, 1);
+    setup_semaphores();
+    while(1){
+        // thermal conditioning
+        sys_sem_wait(&sem_energy);
+
+        sys_gpio_set(led, 1);
+        delay_cycles_exact(62500000); // 500 ms
+        sys_gpio_set(led, 0);
+
+        sys_sem_post(&sem_energy);
+
+        // telemetry reporting
+        sys_sem_wait(&sem_radio);
+
+        printf("[SUBSISTEMA %d] Calentamiento finalizado. Operación nominal alcanzada. Transfiriendo paquetes de telemetría y reportando estado actual a base terrestre...\n", id);
+
+        sys_sem_post(&sem_radio);
+    }
+}
+
+void task1(void){
+    subsystem_task(LED_0, 1);
+}
+void task2(void){
+    subsystem_task(LED_1, 2);
+}
+void task3(void){
+    subsystem_task(LED_2, 3);
+}
+void task4(void){
+    subsystem_task(LED_3, 4);
+}
+void task5(void){
+    subsystem_task(LED_4, 5);
 }
 
 /**

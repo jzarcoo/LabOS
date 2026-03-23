@@ -7,6 +7,8 @@
 .equ SYS_GPIO_GET, 2
 .equ SYS_GPIO_DIR, 3
 .equ SYS_EXIT,     4
+.equ SYS_SEM_WAIT, 5
+.equ SYS_SEM_POST, 6
 
 @ --- Function: void sys_gpio_dir(int pin, int out) ---
 .global sys_gpio_dir
@@ -56,3 +58,23 @@ sys_exit:
     svc #0              @ Jump to Kernel
     mov r7, r12         @ Restore r7
     bx lr               @ Return (though we won't actually return)
+
+.global sys_sem_wait
+.type sys_sem_wait, %function
+sys_sem_wait:
+    @ r0: pointer to semaphore 
+    mov r12, r7
+    movs r7, #SYS_SEM_WAIT
+    svc #0
+    mov r7, r12
+    bx lr
+
+.global sys_sem_post
+.type sys_sem_post, %function
+sys_sem_post:
+    @ r0: pointer to semaphore 
+    mov r12, r7
+    movs r7, #SYS_SEM_POST
+    svc #0
+    mov r7, r12
+    bx lr

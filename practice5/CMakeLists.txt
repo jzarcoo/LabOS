@@ -14,6 +14,7 @@ add_executable(practica5
     pendsv.s
     scheduler.c       
     user_app.c
+    semaphore.c
     syscalls.s
 )
 

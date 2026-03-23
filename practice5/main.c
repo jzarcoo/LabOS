@@ -19,9 +19,22 @@ extern void task_animation(void);
 // extern void task3_infinite(void);
 // extern void task4_finite(void);
 
+extern void task1(void);
+extern void task2(void);
+extern void task3(void);
+extern void task4(void);
+extern void task5(void);
+
 int main() {
     // 1. Inicializar I/O Estándar (Habilita printf y lectura por cable USB)
     stdio_init_all();
+
+    // Ensure USB connection
+    while (!stdio_usb_connected()) {
+        printf("Esperando conexión USB...\n");
+        sleep_ms(100);
+    }
+    printf("Conexión USB establecida.\n");
 
     // 2. Registrar los manejadores de Excepciones del Sistema Operativo
     // SVC (ID 11) maneja las Syscalls solicitadas por las tareas
@@ -34,10 +47,15 @@ int main() {
     __asm volatile ("msr psp, %0" : : "r" (0));
 
     // 4. Registrar tareas en el Scheduler (inician en estado DORMANT, esperando al usuario)
-    task_create(0, task_counter);
-    task_create(1, task_animation);
+    //task_create(0, task_counter);
+    //task_create(1, task_animation);
     // task_create(2, task3_infinite);
     // task_create(3, task4_finite);
+    task_create(0, task1);
+    task_create(1, task2);
+    task_create(2, task3);
+    task_create(3, task4);
+    task_create(4, task5);
 
     // 5. Configurar e iniciar SysTick
     // Para un reloj de 125MHz, contar 1,250,000 ciclos equivale a 10 milisegundos
@@ -46,8 +64,8 @@ int main() {
     // 0x07 = Habilita el Timer, habilita la Interrupción, y usa la fuente de reloj principal
     SYSTICK_CTRL = 0x07; 
 
-    printf("Kernel de la Practica 4 Iniciado.\n");
-    printf("Envia 1, 2, 3 o 4 por la terminal USB para encolar tareas.\n");
+    printf("Kernel de la Practica 5 Iniciado.\n");
+    // printf("Envia 1, 2, 3 o 4 por la terminal USB para encolar tareas.\n");
 
     // 6. Bucle Idle (El sistema descansa hasta que SysTick lo despierte)
     while (1) {

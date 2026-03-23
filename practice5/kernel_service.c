@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "semaphore.h"
 
 /* Syscall ID for GPIO set operation*/
 #define SYS_GPIO_SET 1
@@ -8,6 +9,8 @@
 #define SYS_GPIO_DIR 3
 /* NEW: Syscall ID to terminate a task/process */
 #define SYS_EXIT 4
+#define SYS_SEM_WAIT 5
+#define SYS_SEM_POST 6
 
 // Declarations of kernel-level GPIO functions (defined in kernel_driver.c)
 extern void k_gpio_set(uint32_t pin, uint32_t value);
@@ -52,6 +55,15 @@ void kernel_service(uint32_t *svc_args, uint32_t syscall_id) {
             // The task requested to terminate; delegate to the scheduler
             k_task_exit();
             break;
+        
+        case SYS_SEM_WAIT:
+            k_sem_wait((semaphore_t *)svc_args[0]);
+            break;
+        
+        case SYS_SEM_POST:
+            k_sem_post((semaphore_t *)svc_args[0]);
+            break;
+
 
         default:
             // Invalid syscall ID, return an error code (e.g., -1)
