@@ -49,16 +49,39 @@ void task_create(int id, void (*entry_point)(void)) {
  * @brief SysTick handler called automatically by the hardware.
  */
 void isr_systick() {
+    // logic for weighted scheduling
+    static int last_task = -1;
+    static bool is_waiting_weight = false; 
+
     // 1. Non-blocking USB UART polling
     int c = getchar_timeout_us(0); 
-    if (c >= '1' && c <= '4') {
+    if (c == PICO_ERROR_TIMEOUT || c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+        // ignore
+    }else if (is_waiting_weight && c >= '1' && c <= '9') {
+        // Asigna peso
+        int quantum = c - '0';
+        tasks[last_task].quantum = quantum;
+        tasks[last_task].ticks_remaining = quantum;
+        printf("Peso de tarea %d actualizado a %d.\n", last_task + 1, quantum);
+        is_waiting_weight = false;
+    }else if (c >= '1' && c <= '4') {
+        // Selecciona tarea
         int idx = c - '1';
-        if (tasks[idx].state == DORMANT) {
-            init_task_stack(idx); // Prepare its stack
-            printf("Tarea %d agregada a la cola.\n", idx + 1);
-        } else {
-            printf("Tarea %d ya esta en ejecucion.\n", idx + 1);
+        if(!is_waiting_weight){
+            if (tasks[idx].state == DORMANT) {
+                init_task_stack(idx); // Prepare its stack
+                printf("Tarea %d agregada a la cola.\n", idx + 1);
+            } else {
+                printf("Tarea %d ya esta en ejecucion.\n", idx + 1);
+            }
         }
+        last_task = idx;
+    }else if (c == 'w' && last_task != -1) {
+        printf("Esperando peso para tarea %d (1-9)...\n", last_task + 1);
+        is_waiting_weight = true;
+    } else {
+        printf("\n \n Entrada no valida. \n Envia 1-4 para tareas o 'w' para cambiar peso (1-9) de la ultima tarea seleccionada.\n");
+        is_waiting_weight = false; 
     }
 
     if (current_task != -1) {

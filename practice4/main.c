@@ -55,6 +55,7 @@ int main() {
 
     printf("Kernel de la Practica 4 Iniciado.\n");
     printf("Envia 1, 2, 3 o 4 por la terminal USB para encolar tareas.\n");
+    printf("Envia 'w' seguido de un número del 1 al 9 para cambiar el quantum (1-9) de la última tarea seleccionada.\n");
 
     // 6. Bucle Idle (El sistema descansa hasta que SysTick lo despierte)
     while (1) {
