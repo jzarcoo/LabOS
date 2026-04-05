@@ -30,7 +30,15 @@ int sys_gpio_get(int pin);
  */
 int sys_gpio_dir(int pin, int output);
 
+/**
+ * @brief Syscalls interface for semaphore wait operation.
+ * @param sem Pointer to the semaphore to wait on.
+ */
 void sys_sem_wait(semaphore_t *sem);
+/**
+ * @brief Syscalls interface for semaphore post operation.
+ * @param sem Pointer to the semaphore to post.
+ */
 void sys_sem_post(semaphore_t *sem);
 
 

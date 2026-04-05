@@ -59,22 +59,24 @@ sys_exit:
     mov r7, r12         @ Restore r7
     bx lr               @ Return (though we won't actually return)
 
+@ --- Function: void sys_sem_wait(semaphore_t *sem) ---
 .global sys_sem_wait
 .type sys_sem_wait, %function
 sys_sem_wait:
     @ r0: pointer to semaphore 
     mov r12, r7
-    movs r7, #SYS_SEM_WAIT
-    svc #0
-    mov r7, r12
-    bx lr
+    movs r7, #SYS_SEM_WAIT  @ Load syscall ID (5)
+    svc #0                  @ Jump to Kernel
+    mov r7, r12             @ Restore r7
+    bx lr                   @ Return
 
+@ --- Function: void sys_sem_post(semaphore_t *sem) ---
 .global sys_sem_post
 .type sys_sem_post, %function
 sys_sem_post:
     @ r0: pointer to semaphore 
     mov r12, r7
-    movs r7, #SYS_SEM_POST
-    svc #0
-    mov r7, r12
-    bx lr
+    movs r7, #SYS_SEM_POST  @ Load syscall ID (6)
+    svc #0                  @ Jump to Kernel
+    mov r7, r12             @ Restore r7
+    bx lr                   @ Return

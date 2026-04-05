@@ -9,8 +9,9 @@
 #define SYS_GPIO_DIR 3
 /* NEW: Syscall ID to terminate a task/process */
 #define SYS_EXIT 4
-#define SYS_SEM_WAIT 5
-#define SYS_SEM_POST 6
+/* NEW: Syscall IDs for semaphore operations */
+#define SYS_SEM_WAIT 5 // Wait operation on a semaphore
+#define SYS_SEM_POST 6 // Post operation on a semaphore
 
 // Declarations of kernel-level GPIO functions (defined in kernel_driver.c)
 extern void k_gpio_set(uint32_t pin, uint32_t value);
@@ -57,10 +58,12 @@ void kernel_service(uint32_t *svc_args, uint32_t syscall_id) {
             break;
         
         case SYS_SEM_WAIT:
+            // Wait on the semaphore 
             k_sem_wait((semaphore_t *)svc_args[0]);
             break;
         
         case SYS_SEM_POST:
+            // Post to the semaphore 
             k_sem_post((semaphore_t *)svc_args[0]);
             break;
 
