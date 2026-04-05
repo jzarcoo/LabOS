@@ -11,7 +11,7 @@ typedef enum {
     DORMANT, // Inactiva, no está en la cola
     READY,   // Lista para ejecutarse
     RUNNING,  // Ejecutándose actualmente
-    BLOCKED   
+    BLOCKED   // Bloqueada, esperando un recurso
 } task_state_t;
 
 // Task Control Block
