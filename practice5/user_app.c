@@ -10,9 +10,10 @@
 #define LED_3 19
 #define LED_4 20
 
-static int sem_initialized = 0;
-semaphore_t sem_radio;
-semaphore_t sem_energy;
+// Semaphore instances for the subsystem tasks
+static int sem_initialized = 0; // Flag to ensure semaphores are initialized only once
+semaphore_t sem_radio; // Mutex semaphore for radio access
+semaphore_t sem_energy; // Counting semaphore for energy subsystem (max 3 concurrent accesses)
 
 /**
  * @brief Busy-wait for an exact number of core cycles.
@@ -41,6 +42,10 @@ void setup_leds(void)
     sys_gpio_dir(LED_4, 1);
 }
 
+/**
+ * @brief Initialize semaphores for the subsystem tasks.
+ * This function is called once by the first task that needs the semaphores.
+ */
 void setup_semaphores(void) {
     if (sem_initialized==1) return;
     k_sem_init(&sem_radio, 1); 
@@ -139,43 +144,64 @@ void telemetry_report(const char *message) {
     }
 }
 
+/**
+ * @brief Subsystem task that simulates thermal conditioning and telemetry reporting.
+ * @param led GPIO pin for the subsystem's LED.
+ * @param id Subsystem ID for telemetry messages.
+ */
 void subsystem_task(int led, int id){
+    // Descomentar para probar semáforos
     sys_gpio_dir(led, 1);
-    setup_semaphores();
+    //setup_semaphores();
     while(1){
         // thermal conditioning
-        sys_sem_wait(&sem_energy);
+        //sys_sem_wait(&sem_energy);
 
         sys_gpio_set(led, 1);
         delay_cycles_exact(62500000); // 500 ms
         sys_gpio_set(led, 0);
 
-        sys_sem_post(&sem_energy);
+        //sys_sem_post(&sem_energy);
 
         // telemetry reporting
-        sys_sem_wait(&sem_radio);
+        //sys_sem_wait(&sem_radio);
         
         // Print a message to the UART simulating telemetry reporting
         char message[256];
         snprintf(message, sizeof(message), "[SUBSISTEMA %d] Calentamiento finalizado. Operación nominal alcanzada. Transfiriendo paquetes de telemetría y reportando estado actual a base terrestre...\n", id);
         telemetry_report(message);
 
-        sys_sem_post(&sem_radio);
+        //sys_sem_post(&sem_radio);
     }
 }
 
+/**
+ * @brief Task 1: Subsystem task for LED_0
+ */
 void task1(void){
     subsystem_task(LED_0, 1);
 }
+/**
+ * @brief Task 2: Subsystem task for LED_1
+ */
 void task2(void){
     subsystem_task(LED_1, 2);
 }
+/**
+ * @brief Task 3: Subsystem task for LED_2
+ */
 void task3(void){
     subsystem_task(LED_2, 3);
 }
+/**
+ * @brief Task 4: Subsystem task for LED_3
+ */
 void task4(void){
     subsystem_task(LED_3, 4);
 }
+/**
+ * @brief Task 5: Subsystem task for LED_4
+ */
 void task5(void){
     subsystem_task(LED_4, 5);
 }
