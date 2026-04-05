@@ -128,6 +128,17 @@ void task4_finite(void)
     // TODO: Implement a finite task that blinks an LED 5 times and then terminates.
 }
 
+
+void uart_write(char c) {
+    printf("%c", c);
+}
+
+void telemetry_report(const char *message) {
+    while(*message) {
+        uart_write(*message++);
+    }
+}
+
 void subsystem_task(int led, int id){
     sys_gpio_dir(led, 1);
     setup_semaphores();
@@ -143,8 +154,11 @@ void subsystem_task(int led, int id){
 
         // telemetry reporting
         sys_sem_wait(&sem_radio);
-
-        printf("[SUBSISTEMA %d] Calentamiento finalizado. Operación nominal alcanzada. Transfiriendo paquetes de telemetría y reportando estado actual a base terrestre...\n", id);
+        
+        // Print a message to the UART simulating telemetry reporting
+        char message[256];
+        snprintf(message, sizeof(message), "[SUBSISTEMA %d] Calentamiento finalizado. Operación nominal alcanzada. Transfiriendo paquetes de telemetría y reportando estado actual a base terrestre...\n", id);
+        telemetry_report(message);
 
         sys_sem_post(&sem_radio);
     }
