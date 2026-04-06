@@ -21,6 +21,11 @@ void assign_process(int pid, int base, int limit) {
 int base_limit(int pid, int address) {
     // TODO: Alumno - Buscar el proceso por PID
     // TODO: Alumno - Verificar si la direccion esta dentro del rango [base, base + limite)
+    for(int i=0; i<process_count; i++) {
+        if(processes[i].pid == pid) {
+            return address >= processes[i].base && address < processes[i].base + processes[i].limit;
+        }
+    }
     // Retornar 1 si es valido, 0 si hay violacion, -1 si el proceso no existe
     return -1; // Placeholder
 }
