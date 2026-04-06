@@ -65,7 +65,7 @@ int main() {
     SYSTICK_CTRL = 0x07; 
 
     printf("Kernel de la Practica 5 Iniciado.\n");
-    // printf("Envia 1, 2, 3 o 4 por la terminal USB para encolar tareas.\n");
+    printf("Envia 1, 2, 3, 4 o 5 por la terminal USB para encolar tareas.\n");
 
     // 6. Bucle Idle (El sistema descansa hasta que SysTick lo despierte)
     while (1) {

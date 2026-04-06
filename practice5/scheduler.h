@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define MAX_TASKS 5
+#define MAX_TASKS 6
 #define STACK_SIZE 256 // 256 palabras de 32 bits = 1KB por tarea
 
 // Estados posibles de una tarea

@@ -133,14 +133,14 @@ void task4_finite(void)
     // TODO: Implement a finite task that blinks an LED 5 times and then terminates.
 }
 
-
-void uart_write(char c) {
-    printf("%c", c);
-}
-
+/**
+ * @brief Print telemetry messages with a delay between characters.
+ * @param message The message to print.
+ */
 void telemetry_report(const char *message) {
     while(*message) {
-        uart_write(*message++);
+        printf("%c", *message++);
+        delay_cycles_exact(12500000 / 100); 
     }
 }
 
@@ -149,29 +149,35 @@ void telemetry_report(const char *message) {
  * @param led GPIO pin for the subsystem's LED.
  * @param id Subsystem ID for telemetry messages.
  */
-void subsystem_task(int led, int id){
+void subsystem_task(int led, int id) {
+    int use_semaphores = 1; // Set to 1 to enable semaphore synchronization, 0 for no synchronization
     // Descomentar para probar semáforos
     sys_gpio_dir(led, 1);
-    //setup_semaphores();
+    if (use_semaphores==1)
+        setup_semaphores(); // semaphore
     while(1){
         // thermal conditioning
-        //sys_sem_wait(&sem_energy);
+        if (use_semaphores==1)
+            sys_sem_wait(&sem_energy);// semaphore
 
         sys_gpio_set(led, 1);
         delay_cycles_exact(62500000); // 500 ms
         sys_gpio_set(led, 0);
 
-        //sys_sem_post(&sem_energy);
+        if (use_semaphores==1)
+            sys_sem_post(&sem_energy); // semaphore
 
         // telemetry reporting
-        //sys_sem_wait(&sem_radio);
+        if (use_semaphores==1)
+            sys_sem_wait(&sem_radio); // semaphore
         
         // Print a message to the UART simulating telemetry reporting
         char message[256];
         snprintf(message, sizeof(message), "[SUBSISTEMA %d] Calentamiento finalizado. Operación nominal alcanzada. Transfiriendo paquetes de telemetría y reportando estado actual a base terrestre...\n", id);
         telemetry_report(message);
 
-        //sys_sem_post(&sem_radio);
+        if (use_semaphores==1)
+            sys_sem_post(&sem_radio); // semaphore
     }
 }
 

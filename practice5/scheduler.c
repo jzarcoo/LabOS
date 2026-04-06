@@ -55,9 +55,9 @@ void isr_systick() {
         int idx = c - '1';
         if (tasks[idx].state == DORMANT) {
             init_task_stack(idx); // Prepare its stack
-            printf("Tarea %d agregada a la cola.\n", idx + 1);
+            // printf("Tarea %d agregada a la cola.\n", idx + 1);
         } else {
-            printf("Tarea %d ya esta en ejecucion.\n", idx + 1);
+            // printf("Tarea %d ya esta en ejecucion.\n", idx + 1);
         }
     }
 
@@ -92,9 +92,11 @@ void k_task_exit(void) {
  */
 uint32_t schedule(uint32_t current_sp) {
     // Save the SP of the task that was just paused
-    if (current_task != -1 && tasks[current_task].state == RUNNING) {
+    if (current_task != -1) {
         tasks[current_task].sp = (uint32_t *)current_sp;
-        tasks[current_task].state = READY; // Put it back in the ready queue
+        if (tasks[current_task].state == RUNNING) {
+            tasks[current_task].state = READY;
+        }
     }
 
     // Round Robin algorithm
