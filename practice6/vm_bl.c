@@ -34,6 +34,7 @@ void ram_write(int pid, int address, unsigned char value) {
     int result = base_limit(pid, address);
     if (result == 1) {
         // TODO: Alumno - Realizar la escritura en la RAM
+        ram[address] = value;
         printf("WRITE: Process %d wrote %02X to 0x%03X\n", pid, value, address);
     } else if (result == 0) {
         printf("ERROR: Process %d access violation at 0x%03X (Base-Limit)\n", pid, address);
@@ -47,6 +48,7 @@ unsigned char ram_read(int pid, int address) {
     if (result == 1) {
         // TODO: Alumno - Realizar la lectura de la RAM
         unsigned char value = 0; // Cambiar por valor real de RAM
+        value = ram[address];
         printf("READ: Process %d read %02X from 0x%03X\n", pid, value, address);
         return value;
     } else if (result == 0) {
