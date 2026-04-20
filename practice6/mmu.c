@@ -32,26 +32,32 @@ int mmu_translate(int virtual_addr, int page_size) {
     if (page_size <= 0) return -1;
 
     // TODO: Alumno - Calcular el numero de pagina y el offset
-    // int page = ...
-    // int offset = ...
+    int page = virtual_addr / page_size; 
+    int offset = virtual_addr % page_size;
     int frame = -1;
 
     // TODO: Alumno - Si use_tlb es 1, buscar primero en el TLB
-    // frame = ...
+    if (use_tlb) {
+        frame = tlb_lookup(page);
+    }
 
     if (frame == -1) {
         // TODO: Alumno - Si no esta en TLB, buscar en la tabla de paginas
+        frame = page_table[page];
         // Si se encuentra, y use_tlb es 1, insertarlo en el TLB
+        if (frame != -1 && use_tlb) {
+            tlb_insert(page, frame);
+        }
     }
 
     if (frame != -1) {
         // TODO: Alumno - Calcular la direccion fisica
-        int physical_addr = 0; // physical_addr = frame * page_size + offset;
+        int physical_addr = frame * page_size + offset;
         printf("TRANSLATE: Virtual 0x%04X -> Physical 0x%04X (Frame %d)\n", 
                virtual_addr, physical_addr, frame);
         return physical_addr;
     } else {
-        printf("TRANSLATE ERROR: Page %d is not mapped\n", 0 /* page */);
+        printf("TRANSLATE ERROR: Page %d is not mapped\n", page );
         return -1;
     }
 }
