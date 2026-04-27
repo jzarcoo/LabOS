@@ -17,6 +17,12 @@
 /* Safe Jump Point for Recovery */
 jmp_buf recovery_point;
 
+/* Jump for graceful degradation */
+jmp_buf degradation_point;
+
+/* Task respawn simulation variables */
+jmp_buf respawn_point;
+
 /* Medical Resilience Flags */
 volatile bool safe_mode_enabled = false;
 volatile uint32_t fault_count = 0;
@@ -45,14 +51,14 @@ void recovery_landing_zone(void) {
     // -------------------------------------------------------------------------
     // This is the chosen "warm reset" method. It restores the system without
     // losing the USB connection or resetting the hardware registers.
-    printf("[RECOVERY: ROLLBACK] Context restored to last stable state.\n");
-    printf("[RECOVERY] USB Connection maintained. Resuming monitoring...\n");
+    // printf("[RECOVERY: ROLLBACK] Context restored to last stable state.\n");
+    // printf("[RECOVERY] USB Connection maintained. Resuming monitoring...\n");
 
     // Mandatory Alert Period (so students see the RED led)
     for(volatile uint32_t i=0; i<8000000; i++) { __asm volatile ("nop"); }
     
     // PERFORM ROLLBACK (Returns execution to setjmp point in main)
-    longjmp(recovery_point, 1);
+    // longjmp(recovery_point, 1);
 
     // --- EVERYTHING BELOW THIS LINE IS UNREACHABLE UNLESS LONGJMP IS REMOVED ---
     
@@ -60,26 +66,26 @@ void recovery_landing_zone(void) {
     // CHALLENGE 1: GRACEFUL DEGRADATION
     // -------------------------------------------------------------------------
     // [STUDENT_TODO]: Activate safe_mode_enabled = true;
-    /* 
-    printf("[RECOVERY: DEGRADATION] Switching to safe clinical mode...\n");
-    */
+    // safe_mode_enabled = true;
+    // printf("[RECOVERY: DEGRADATION] Switching to safe clinical mode...\n");
+    // longjmp(degradation_point, 1); // without this, the system cannot return to the main loop
 
     // -------------------------------------------------------------------------
     // CHALLENGE 2: TASK RESPAWNING (Simulation)
     // -------------------------------------------------------------------------
     // [STUDENT_TODO]: Reset simulation variables or re-initialize logic.
-    /* 
-    printf("[RECOVERY: RESPAWN] Re-initializing monitor task instance...\n");
-    */
+    
+    // printf("[RECOVERY: RESPAWN] Re-initializing monitor task instance...\n");
+    // longjmp(respawn_point, 1); // without this, the system cannot return to the main loop    
 
     // -------------------------------------------------------------------------
     // CHALLENGE 3: FAIL-SAFE (HARD RESET)
     // -------------------------------------------------------------------------
     // [STUDENT_TODO]: Implement the hardware reboot using the watchdog.
     // WARNING: This will cause the USB/Putty to disconnect!
-    /* 
+    
     printf("[RECOVERY: FAIL-SAFE] Critical failure. Performing hard reboot...\n");
-    */
+    watchdog_reboot(0, 0, 0); 
 }
 
 /**
@@ -142,12 +148,21 @@ int main() {
             printf("\n[SYSTEM] Recovery complete. Successfuly restored to last stable state.\n");
         }
 
+        if (setjmp(respawn_point) != 0) {
+            printf("\n[SYSTEM] Task respawned. Re-initializing task instance...\n");
+        }
+
         uint32_t start_time = to_ms_since_boot(get_absolute_time());
         bool state = false;
 
         printf("\n[SYSTEM] Resuming heartbeat...\n");
 
         while(1) {
+            // Degradation logic (deactivate no critical features, slow down operations, etc.)
+            if (setjmp(degradation_point) != 0) {
+                printf("\n[SYSTEM] Safe mode activated. System is now in degraded state.\n");
+            }
+
             uint32_t now = to_ms_since_boot(get_absolute_time());
             
             uint32_t blink_speed = safe_mode_enabled ? 1000 : 200;
