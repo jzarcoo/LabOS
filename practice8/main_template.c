@@ -66,10 +66,12 @@ void fs_format() {
 }
 
 void fs_init() {
-    // TODO: CHALLENGE 1 - Inicialización
-    // 1. Compara 'fs_meta->magic_number' con la constante MAGIC_NUMBER.
-    // 2. Si no coinciden, imprime un mensaje de alerta (ej. "Forzando formateo...") y llama a fs_format().
-    // 3. Si coinciden, imprime "FS Inicializado exitosamente" mostrando el número mágico encontrado.
+    if (fs_meta->magic_number != MAGIC_NUMBER) {
+        printf("FS Warning: Magic Number no encontrado. Forzando formateo...\n");
+        fs_format();
+        return;
+    } 
+    printf("FS Inicializado exitosamente. Magic Number: 0x%08X\n", fs_meta->magic_number);
 }
 
 // --- MÓDULO 2: Asignación de Metadatos y Alineación ---
