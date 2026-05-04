@@ -233,11 +233,32 @@ int fs_read(const char* name, uint8_t* buffer, uint32_t max_size) {
 int fs_delete(const char* name) {
     // TODO: CHALLENGE 4A - Borrado lógico
     // 1. Busca el índice del archivo solicitado. Si no existe, retorna -1.
+    int target_idx = -1;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (fs_meta->entries[i].status == STATUS_OCCUPIED &&
+            strncmp(fs_meta->entries[i].name, name, 12) == 0) {
+            target_idx = i;
+            break;
+        }
+    }
+    if (target_idx == -1) {
+        printf("FS Error: Archivo '%s' no encontrado para borrar.\n", name);
+        return -1;
+    }
     // 2. Haz una copia de fs_meta en una variable local 'updated_meta'.
+    MetaData_Table updated_meta;
+    memcpy(&updated_meta, fs_meta, sizeof(MetaData_Table));
     // 3. Cambia el estado de la entrada encontrada a STATUS_DELETED.
+    updated_meta.entries[target_idx].status = STATUS_DELETED;
     // 4. Usa las rutinas de Flash (erase y program) para sobrescribir los metadatos.
+    int ints = save_and_disable_interrupts();
+    flash_range_erase(FS_BASE_OFFSET, FLASH_SECTOR_SIZE);
+    uint8_t meta_buf[META_PROGRAM_SIZE];
+    memset(meta_buf, 0xFF, META_PROGRAM_SIZE);
+    memcpy(meta_buf, &updated_meta, sizeof(MetaData_Table));
+    flash_range_program(FS_BASE_OFFSET, meta_buf, META_PROGRAM_SIZE);
+    restore_interrupts(ints);
     // Nota: NO borres los datos del archivo en la Flash, solo actualiza el estado.
-
     return 0;
 }
 
