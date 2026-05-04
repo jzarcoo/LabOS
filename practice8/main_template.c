@@ -81,8 +81,7 @@ int fs_create(const char* name) {
         printf("FS Error: Nombre muy largo.\n");
         return -1;
     }
-
-    // TODO: CHALLENGE 2 - Creación de archivo
+    // CHALLENGE 2 - Creación de archivo
     // 1. Itera sobre fs_meta->entries buscando la primera entrada con status == STATUS_FREE.
     // 2. Durante la iteración, verifica que no exista ya un archivo con el mismo nombre y status == STATUS_OCCUPIED.
     //    Si existe, retorna error (-2).
@@ -93,8 +92,48 @@ int fs_create(const char* name) {
     //    tamaño 0, y cambia su estado a STATUS_OCCUPIED.
     // 6. Escribe 'updated_meta' en la Flash (revisa fs_format para ver cómo borrar y programar).
     // 7. Retorna el índice (free_index) creado.
+    int free_index = -1, next_free_offset = FS_BASE_OFFSET;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (fs_meta->entries[i].status == STATUS_FREE && free_index == -1) {
+            free_index = i;
+        }
+        if (fs_meta->entries[i].status != STATUS_OCCUPIED) {
+            continue;
+        }
+        if (strncmp(fs_meta->entries[i].name, name, 12) == 0) {
+            printf("FS Error: Archivo con nombre '%s' ya existe.\n", name);
+            return -2;
+        }
+        int offset = fs_meta->entries[i].offset, size = fs_meta->entries[i].size;
+        int sectors_needed = (size == 0) ? 1 : ((size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE);
+        int free_offset = offset + sectors_needed * FLASH_SECTOR_SIZE;
+        if (free_offset > next_free_offset) {
+            next_free_offset = free_offset;
+        }
+    }
+    if (free_index == -1) {
+        printf("FS Error: No hay espacio para más archivos.\n");
+        return -1;
+    }
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(FS_BASE_OFFSET, FLASH_SECTOR_SIZE);
 
-    return -1; // Elimina este return al implementar tu código
+    MetaData_Table updated_meta;
+    memcpy(&updated_meta, fs_meta, sizeof(MetaData_Table));
+    
+    strncpy(updated_meta.entries[free_index].name, name, 12);
+    updated_meta.entries[free_index].offset = next_free_offset;
+    updated_meta.entries[free_index].size = 0;
+    updated_meta.entries[free_index].status = STATUS_OCCUPIED;
+
+    uint8_t meta_buf[META_PROGRAM_SIZE];
+    memset(meta_buf, 0xFF, META_PROGRAM_SIZE);
+    memcpy(meta_buf, &updated_meta, sizeof(MetaData_Table));
+
+    flash_range_program(FS_BASE_OFFSET, meta_buf, META_PROGRAM_SIZE);
+    restore_interrupts(ints);
+    
+    return free_index;
 }
 
 // --- MÓDULO 3: Read-Modify-Write ---
@@ -166,6 +205,13 @@ void fs_dump() {
     // 1. Itera sobre las entradas de metadatos (MAX_FILES).
     // 2. Si el estado es distinto a STATUS_FREE, imprime sus campos con formato similar al encabezado.
     // 3. Para el estado, convierte los códigos Hex a strings (Ej. "OCCUPIED" o "DELETED").
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (fs_meta->entries[i].status != STATUS_FREE) {
+            const char* status_str = (fs_meta->entries[i].status == STATUS_OCCUPIED) ? "OCCUPIED" :
+                                        (fs_meta->entries[i].status == STATUS_DELETED) ? "DELETED" : "UNKNOWN";
+            printf("%-12s  0x%08X | %-8u | %-8s\n", fs_meta->entries[i].name, fs_meta->entries[i].offset, fs_meta->entries[i].size, status_str);
+        }
+    }
 
     printf("==============================\n\n");
 }
