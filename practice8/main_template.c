@@ -305,6 +305,67 @@ void fs_dump() {
     printf("==============================\n\n");
 }
 
+void fs_compact(){
+    int ints = save_and_disable_interrupts();
+
+    MetaData_Table updated_meta;
+    memcpy(&updated_meta, fs_meta, sizeof(MetaData_Table));
+
+    int order[MAX_FILES];
+    int count = 0;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (fs_meta->entries[i].status == STATUS_OCCUPIED) {
+            order[count++] = i;
+        }else{
+            updated_meta.entries[i].status = STATUS_FREE;
+            updated_meta.entries[i].offset = 0;
+            updated_meta.entries[i].size = 0;
+            memset(updated_meta.entries[i].name, 0, 12);
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        int idx = order[i];
+        if (i == 0) {
+            updated_meta.entries[idx].offset = FS_BASE_OFFSET + FLASH_SECTOR_SIZE;
+        } else {
+            int prev_idx = order[i-1];
+            int prev_size = updated_meta.entries[prev_idx].size;
+            int prev_sectors = (prev_size == 0) ? 1 : ((prev_size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE);
+            updated_meta.entries[idx].offset = updated_meta.entries[prev_idx].offset + prev_sectors * FLASH_SECTOR_SIZE;
+            if (updated_meta.entries[idx].offset != fs_meta->entries[idx].offset) {
+                uint8_t page_buf[FLASH_PAGE_SIZE];
+
+                int file_size = updated_meta.entries[idx].size;
+
+                const uint8_t* data = (const uint8_t*)(XIP_BASE + fs_meta->entries[idx].offset);
+
+                int sectors_needed = (file_size == 0) ? 1 : ((file_size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE);
+                int total_size = sectors_needed * FLASH_SECTOR_SIZE;
+
+                flash_range_erase(updated_meta.entries[idx].offset, total_size);
+
+                for (int j = 0; j < file_size; j += FLASH_PAGE_SIZE){
+                    memset(page_buf, 0xFF, FLASH_PAGE_SIZE);
+                    int block_size = file_size - j > FLASH_PAGE_SIZE ? FLASH_PAGE_SIZE : (file_size - j);
+                    memcpy(page_buf, data + j, block_size);
+                    flash_range_program(updated_meta.entries[idx].offset + j, page_buf, FLASH_PAGE_SIZE);
+                
+                }
+
+
+            }
+        }
+    }
+
+    uint8_t meta_buf[META_PROGRAM_SIZE];
+    memset(meta_buf, 0xFF, META_PROGRAM_SIZE);
+    memcpy(meta_buf, &updated_meta, sizeof(MetaData_Table));
+
+    flash_range_erase(FS_BASE_OFFSET, FLASH_SECTOR_SIZE);
+    flash_range_program(FS_BASE_OFFSET, meta_buf, META_PROGRAM_SIZE);
+    restore_interrupts(ints);   
+}
+
 // --- DEMOSTRACIÓN PRINCIPAL (No modificar el main) ---
 
 int main() {
