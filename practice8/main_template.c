@@ -92,7 +92,7 @@ int fs_create(const char* name) {
     //    tamaño 0, y cambia su estado a STATUS_OCCUPIED.
     // 6. Escribe 'updated_meta' en la Flash (revisa fs_format para ver cómo borrar y programar).
     // 7. Retorna el índice (free_index) creado.
-    int free_index = -1, next_free_offset = FS_BASE_OFFSET;
+    int free_index = -1, next_free_offset = FS_BASE_OFFSET + FLASH_SECTOR_SIZE; 
     for (int i = 0; i < MAX_FILES; i++) {
         if (fs_meta->entries[i].status == STATUS_FREE && free_index == -1) {
             free_index = i;
@@ -157,14 +157,45 @@ int fs_write(const char* name, const uint8_t* data, uint32_t size) {
 
     // TODO: CHALLENGE 3A - Escritura Flash y Actualización de Metadatos
     // 1. Recupera el offset asignado para este archivo desde los metadatos.
+    uint32_t offset = fs_meta->entries[target_idx].offset;
     // 2. Calcula cuántos sectores requiere 'size' bytes. Recuerda que solo puedes borrar en
     //    múltiplos de FLASH_SECTOR_SIZE (4096).
+    int sectors_needed = (size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE;
+    int total_size = sectors_needed * FLASH_SECTOR_SIZE;
     // 3. Usa save_and_disable_interrupts() y borra los sectores necesarios.
+    int ints = save_and_disable_interrupts();
+    flash_range_erase(offset, total_size);
     // 4. Programa los datos en la Flash iterando en bloques de FLASH_PAGE_SIZE (256 bytes).
     //    Asegúrate de no escribir fuera del tamaño de los datos pasados en el parámetro.
+    uint8_t page_buf[FLASH_PAGE_SIZE];
+    for (int i = 0; i < size; i += FLASH_PAGE_SIZE) {
+        memset(page_buf, 0xFF, FLASH_PAGE_SIZE);
+        int block_size = size - i > FLASH_PAGE_SIZE ? FLASH_PAGE_SIZE : (size - i);
+        memcpy(page_buf, data + i, block_size);
+        flash_range_program(offset + i, page_buf, FLASH_PAGE_SIZE);
+    }
     // 5. Restaura las interrupciones.
+    restore_interrupts(ints);
     // 6. Si el archivo cambió de tamaño, actualiza 'size' en una copia de los metadatos y reescribe
     //    el bloque del superbloque (Sector 0) para guardar el nuevo tamaño de forma persistente.
+
+    if (size == fs_meta->entries[target_idx].size) {
+        return 0; 
+    }
+
+    int ints2 = save_and_disable_interrupts();
+    flash_range_erase(FS_BASE_OFFSET, FLASH_SECTOR_SIZE);
+
+    MetaData_Table updated_meta;
+    memcpy(&updated_meta, fs_meta, sizeof(MetaData_Table));
+    updated_meta.entries[target_idx].size = size;
+
+    uint8_t meta_buf[META_PROGRAM_SIZE];
+    memset(meta_buf, 0xFF, META_PROGRAM_SIZE);
+    memcpy(meta_buf, &updated_meta, sizeof(MetaData_Table));
+
+    flash_range_program(FS_BASE_OFFSET, meta_buf, META_PROGRAM_SIZE);
+    restore_interrupts(ints2);
 
     return 0;
 }
@@ -172,14 +203,29 @@ int fs_write(const char* name, const uint8_t* data, uint32_t size) {
 int fs_read(const char* name, uint8_t* buffer, uint32_t max_size) {
     // TODO: CHALLENGE 3B - Lectura XIP (Execute-In-Place)
     // 1. Busca el índice del archivo por su nombre (igual que en fs_write).
+    int target_idx = -1;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (fs_meta->entries[i].status == STATUS_OCCUPIED &&
+            strncmp(fs_meta->entries[i].name, name, 12) == 0) {
+            target_idx = i;
+            break;
+        }
+    }
     // 2. Si no se encuentra, retorna -1.
+    if (target_idx == -1) {
+        printf("FS Error: Archivo '%s' no encontrado.\n", name);
+        return -1;
+    }
     // 3. Obtén el 'file_size' real del archivo desde los metadatos.
+    uint32_t file_size = fs_meta->entries[target_idx].size;
     // 4. Determina cuánto vas a leer: el mínimo entre 'file_size' y 'max_size'.
+    uint32_t to_read = (file_size < max_size) ? file_size : max_size;
     // 5. Calcula la dirección de memoria física: (XIP_BASE + offset).
+    uint32_t address = XIP_BASE + fs_meta->entries[target_idx].offset;
     // 6. Usa memcpy() para copiar los bytes directamente de la dirección física al buffer.
+    memcpy(buffer, (const void*)address, to_read);
     // 7. Retorna la cantidad de bytes leídos.
-
-    return 0; // Cambia este return al finalizar
+    return to_read;
 }
     
 // --- MÓDULO 4: Borrado Lógico & Visualización ---
