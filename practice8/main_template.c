@@ -162,6 +162,28 @@ int fs_write(const char* name, const uint8_t* data, uint32_t size) {
     //    múltiplos de FLASH_SECTOR_SIZE (4096).
     int sectors_needed = (size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE;
     int total_size = sectors_needed * FLASH_SECTOR_SIZE;
+
+    // extra: prevención de desbordamiento
+    int max_offset = FS_BASE_OFFSET + FLASH_SECTOR_SIZE * MAX_FILES; 
+    if (offset + total_size > max_offset) {
+        printf("FS Error: No hay suficiente espacio contiguo para escribir '%s'.\n", name);
+        return -1;
+    }
+    for(int i = 0; i < MAX_FILES; i++) {
+        if (i != target_idx && fs_meta->entries[i].status == STATUS_OCCUPIED) {
+            int cur_offset = fs_meta->entries[i].offset;
+            int cur_size = fs_meta->entries[i].size;
+
+            int cur_sectors = (cur_size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE;
+            int cur_total_size = cur_sectors * FLASH_SECTOR_SIZE;
+
+            if ((offset < cur_total_size + cur_offset) && (offset + total_size > cur_offset)) {
+                printf("FS Error: El espacio requerido para '%s' se superpone con '%s'.\n", name, fs_meta->entries[i].name);
+                return -1;
+            }
+        }
+    }
+
     // 3. Usa save_and_disable_interrupts() y borra los sectores necesarios.
     int ints = save_and_disable_interrupts();
     flash_range_erase(offset, total_size);
