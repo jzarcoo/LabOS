@@ -49,6 +49,9 @@ void secure_boot_init() {
     // usando
     // gpio_set_function(PIN, GPIO_FUNC_UART);
     // =============================================================
+    uart_init(UART_ID, BAUD_RATE);
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
 
     // =============================================================
     // TODO 4: Configuracion Especifica del Mecanismo (Polling / IRQ / DMA)
@@ -60,7 +63,8 @@ void secure_boot_init() {
     //   - ¿Necesitas configurar un canal de Acceso Directo a Memoria?
     //   Hazlo aqui:
     // =============================================================
-
+    uart_set_fifo_enabled(UART_ID, false);
+    irq_set_enabled(UART0_IRQ, false);
 }
 
 int main() {
@@ -88,6 +92,16 @@ int main() {
 
     // --- TU CODIGO INICIA AQUI ---
 
+    int bytes_received = 0;
+    while(bytes_received < KEY_LENGTH) {
+        if (uart_is_readable(UART_ID)) {
+            char ch = uart_getc(UART_ID);
+            challenge_key[bytes_received] = ch;
+            printf("%c", ch); 
+            bytes_received++;
+        }
+        tight_loop_contents();
+    }
 
     // --- TU CODIGO TERMINA AQUI ---
 
